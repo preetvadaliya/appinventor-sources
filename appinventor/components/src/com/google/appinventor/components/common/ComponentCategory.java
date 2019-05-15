@@ -50,6 +50,7 @@ import java.util.Map;
     USERINTERFACE("User Interface"),
     LAYOUT("Layout"),
     MEDIA("Media"),
+    AR("Augmented Reality"),
     ANIMATION("Drawing and Animation"),
     MAPS("Maps"),
     SENSORS("Sensors"),
@@ -71,6 +72,7 @@ import java.util.Map;
       DOC_MAP.put("User Interface", "userinterface");
       DOC_MAP.put("Layout", "layout");
       DOC_MAP.put("Media", "media");
+      DOC_MAP.put("Augmented Reality", "augmentedreality");
       DOC_MAP.put("Drawing and Animation", "animation");
       DOC_MAP.put("Maps", "maps");
       DOC_MAP.put("Sensors", "sensors");

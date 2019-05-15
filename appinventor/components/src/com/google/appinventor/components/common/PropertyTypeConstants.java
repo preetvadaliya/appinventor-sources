@@ -353,4 +353,25 @@ public class PropertyTypeConstants {
 
   public static final String PROPERTY_TYPE_NAVIGATION_METHOD = "navigation_method";
 
+ /**
+  * AR Tracking types supported by the ARView3D component.
+  * @see
+  * com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidARTrackingPropertyEditor
+  */
+  public static final String PROPERTY_TYPE_AR_TRACKING_TYPE = "ARTrackingType";
+
+  /**
+   * AR Plane Detection types supported by the ARView3D component.
+   * @see
+   * com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidARPlaneDetectionTypePropertyEditor
+   */
+  public static final String PROPERTY_TYPE_AR_PLANE_DETECTION_TYPE = "ARPlaneDetectionType";
+
+
+ /**
+  * AR Falloff types supported by the ARLight components.
+  * @see
+  * com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidARFalloffTypePropertyEditor
+  */
+  public static final String PROPERTY_TYPE_AR_FALLOFF_TYPE = "ARFallOffType";
 }

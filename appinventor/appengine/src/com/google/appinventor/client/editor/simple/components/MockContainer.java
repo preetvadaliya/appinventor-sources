@@ -109,7 +109,7 @@ public abstract class MockContainer extends MockVisibleComponent implements Drop
     }
   }
 
-  
+
   /**
    * Adds a new component to the end of this container.
    *
@@ -256,7 +256,10 @@ public abstract class MockContainer extends MockVisibleComponent implements Drop
     if (component instanceof MockVisibleComponent) {
       // Sprites are only allowed on Canvas, not other containers.
       // Map features are only allowed on Map, not other containers.
-      if (!(component instanceof MockSprite) && !(component instanceof MockMapFeature)) {
+      // AR nodes are only allowed on ARView3D, not other containers.
+      // AR image markers are only allowed on ARView3D, not other containers.
+      // AR lights are only allowed on ARView3D, not other containers.
+      if (!(component instanceof MockSprite) && !(component instanceof MockMapFeature) && !(component instanceof MockARNode) && !(component instanceof MockImageMarker) && !(component instanceof MockARLight)) {
         return true;
       }
     }

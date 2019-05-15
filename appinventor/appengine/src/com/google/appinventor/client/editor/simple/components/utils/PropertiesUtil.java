@@ -14,6 +14,8 @@ import com.google.appinventor.client.editor.youngandroid.palette.YoungAndroidPal
 import com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidAccelerometerSensitivityChoicePropertyEditor;
 import com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidAlignmentChoicePropertyEditor;
 import com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidAssetSelectorPropertyEditor;
+import com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidARTrackingTypePropertyEditor;
+import com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidARFalloffTypePropertyEditor;
 import com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidBooleanPropertyEditor;
 import com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidButtonShapeChoicePropertyEditor;
 import com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidColorChoicePropertyEditor;
@@ -49,6 +51,8 @@ import com.google.appinventor.client.editor.youngandroid.properties.YoungAndroid
 import com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidThemeChoicePropertyEditor;
 import com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidToastLengthChoicePropertyEditor;
 import com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidVerticalAlignmentChoicePropertyEditor;
+import com.google.appinventor.client.editor.youngandroid.properties.YoungAndroidARPlaneDetectionTypePropertyEditor;
+
 import com.google.appinventor.client.properties.BadPropertyEditorException;
 import com.google.appinventor.client.properties.Property;
 import com.google.appinventor.client.widgets.properties.ChoicePropertyEditor;
@@ -189,6 +193,12 @@ public class PropertiesUtil {
       return new YoungAndroidVerticalAlignmentChoicePropertyEditor();
     } else if (editorType.equals(PropertyTypeConstants.PROPERTY_TYPE_ASSET)) {
       return new YoungAndroidAssetSelectorPropertyEditor(editor);
+    } else if (editorType.equals(PropertyTypeConstants.PROPERTY_TYPE_AR_TRACKING_TYPE)) {
+      return new YoungAndroidARTrackingTypePropertyEditor();
+    } else if (editorType.equals(PropertyTypeConstants.PROPERTY_TYPE_AR_FALLOFF_TYPE)) {
+      return new YoungAndroidARFalloffTypePropertyEditor();
+    } else if (editorType.equals(PropertyTypeConstants.PROPERTY_TYPE_AR_PLANE_DETECTION_TYPE)) {
+      return new YoungAndroidARPlaneDetectionTypePropertyEditor();
     } else if (editorType.equals(PropertyTypeConstants.PROPERTY_TYPE_BLUETOOTHCLIENT)) {
       return new YoungAndroidComponentSelectorPropertyEditor(editor,
           // Pass the set of component types that will be shown in the property editor,
