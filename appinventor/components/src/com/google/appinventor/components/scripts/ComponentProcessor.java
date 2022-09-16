@@ -1759,7 +1759,7 @@ public abstract class ComponentProcessor extends AbstractProcessor {
     if (usesQueries != null) {
       try {
         for (String packageName : usesQueries.packageNames()) {
-          componentInfo.queries.add("<package android:name=\"" + packageName + "\" />");
+          componentInfo.queries.add("<package android:name=\\\"" + packageName + "\\\" />");
         }
         for (IntentFilterElement intent : usesQueries.intents()) {
           updateWithNonEmptyValue(componentInfo.queries, intentFilterElementToIntentString(intent));
