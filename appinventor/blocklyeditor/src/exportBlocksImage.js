@@ -69,6 +69,144 @@ goog.provide('AI.Blockly.ExportBlocksImage');
   var SVG_NS = 'http://www.w3.org/2000/svg';
 
   /**
+   * The colours Blockly's theme gives comments. They are CSS custom
+   * properties on the injection div, so an exported SVG cannot see them.
+   * @param {Blockly.WorkspaceSvg} workspace The workspace.
+   * @return {{fill: string, border: string}} The colours.
+   */
+  function commentColours(workspace) {
+    var div = workspace && workspace.getInjectionDiv && workspace.getInjectionDiv();
+    var style = div ? window.getComputedStyle(div) : null;
+    var read = function(name, fallback) {
+      var value = style ? style.getPropertyValue(name).trim() : '';
+      return value || fallback;
+    };
+    return {
+      fill: read('--commentFillColour', '#FFFCC7'),
+      border: read('--commentBorderColour', '#F2E49B')
+    };
+  }
+
+  /**
+   * Comment text is edited in a <textarea> inside a <foreignObject>. Browsers
+   * do not reliably rasterise foreignObject content when an SVG is drawn onto
+   * a canvas (Safari refuses outright), so each one in the export is replaced
+   * with a background rect plus <text>/<tspan> lines wrapped to the same box.
+   * The text and font are read from the live textarea, since a cloned
+   * textarea has no value. Colours are set inline because the inlined
+   * stylesheet still refers to theme variables that do not exist in the
+   * export.
+   * @param {!Element} clone The export DOM being assembled.
+   * @param {!Element} original The live element the clone was made from.
+   * @param {{fill: string, border: string}} colours See commentColours.
+   */
+  function inlineCommentText(clone, original, colours) {
+    var topbars = clone.querySelectorAll('.blocklyCommentTopbarBackground');
+    for (var t = 0; t < topbars.length; t++) {
+      topbars[t].setAttribute('style', 'fill: ' + colours.border + ';');
+    }
+
+    var clonedObjects = clone.querySelectorAll('foreignObject');
+    var liveObjects = original.querySelectorAll('foreignObject');
+    if (clonedObjects.length !== liveObjects.length) {
+      return;  // Not a 1:1 clone; leave the export as it is.
+    }
+    for (var i = 0; i < clonedObjects.length; i++) {
+      var fo = clonedObjects[i];
+      var textarea = liveObjects[i].querySelector('textarea');
+      if (!textarea) {
+        continue;
+      }
+      var style = window.getComputedStyle(textarea);
+      var fontSize = parseFloat(style.fontSize) || 11;
+      var fontFamily = style.fontFamily || 'sans-serif';
+      var padding = parseFloat(style.paddingLeft) || 0;
+      var lineHeight = parseFloat(style.lineHeight) || fontSize * 1.2;
+      var boxX = parseFloat(fo.getAttribute('x')) || 0;
+      var boxY = parseFloat(fo.getAttribute('y')) || 0;
+      var boxWidth = parseFloat(fo.getAttribute('width')) || 0;
+      var boxHeight = parseFloat(fo.getAttribute('height')) || 0;
+
+      // The textarea's background: filled, and bordered for workspace
+      // comments (bubbles already sit on their own coloured rect).
+      var background = document.createElementNS(SVG_NS, 'rect');
+      background.setAttribute('x', boxX);
+      background.setAttribute('y', boxY);
+      background.setAttribute('width', boxWidth);
+      background.setAttribute('height', boxHeight);
+      var isWorkspaceComment = fo.classList.contains('blocklyCommentForeignObject');
+      background.setAttribute('style', 'fill: ' + colours.fill + ';' +
+          (isWorkspaceComment ? ' stroke: ' + colours.border + '; stroke-width: 1;' : ''));
+
+      // The font family is left to the blocklyText class: the export later
+      // rewrites 'sans-serif' into a quoted font list, which must not land
+      // inside an attribute value.
+      var text = document.createElementNS(SVG_NS, 'text');
+      text.setAttribute('class', 'blocklyText');
+      text.setAttribute('style', 'font-size: ' + fontSize + 'px; fill: ' +
+          (style.color || '#000') + ';');
+      text.setAttribute('xml:space', 'preserve');
+      var lines = wrapLines(textarea.value, boxWidth - 2 * padding,
+          fontSize + 'px ' + fontFamily);
+      var maxLines = Math.max(1, Math.floor((boxHeight - 2 * padding) / lineHeight));
+      for (var j = 0; j < lines.length && j < maxLines; j++) {
+        var tspan = document.createElementNS(SVG_NS, 'tspan');
+        tspan.setAttribute('x', boxX + padding);
+        tspan.setAttribute('y', boxY + padding + fontSize + j * lineHeight);
+        tspan.textContent = lines[j];
+        text.appendChild(tspan);
+      }
+      fo.parentNode.insertBefore(background, fo);
+      fo.parentNode.replaceChild(text, fo);
+    }
+  }
+
+  /**
+   * Breaks text into lines no wider than maxWidth, the way a textarea with
+   * white-space: pre-wrap does: explicit newlines are kept, and words that
+   * are too long for a line are split by character.
+   * @param {string} value The text.
+   * @param {number} maxWidth Available width in pixels.
+   * @param {string} font A CSS font shorthand used to measure.
+   * @return {!Array<string>} The lines.
+   */
+  function wrapLines(value, maxWidth, font) {
+    var context = document.createElement('canvas').getContext('2d');
+    context.font = font;
+    var measure = function(str) { return context.measureText(str).width; };
+    var lines = [];
+    var paragraphs = (value || '').split('\n');
+    for (var p = 0; p < paragraphs.length; p++) {
+      var words = paragraphs[p].split(' ');
+      var line = '';
+      for (var w = 0; w < words.length; w++) {
+        var word = words[w];
+        var candidate = line ? line + ' ' + word : word;
+        if (measure(candidate) <= maxWidth || !line && measure(word) <= maxWidth) {
+          line = candidate;
+          continue;
+        }
+        if (line) {
+          lines.push(line);
+          line = '';
+        }
+        // The word alone is wider than the box: split it by character.
+        while (measure(word) > maxWidth && word.length > 1) {
+          var cut = word.length;
+          while (cut > 1 && measure(word.slice(0, cut)) > maxWidth) {
+            cut--;
+          }
+          lines.push(word.slice(0, cut));
+          word = word.slice(cut);
+        }
+        line = word;
+      }
+      lines.push(line);
+    }
+    return lines;
+  }
+
+  /**
    * Assembles the part of a workspace that belongs in an exported image: the
    * block canvas plus the comment bubbles from the bubble canvas. The two
    * canvases share one transform, so with it removed their children line up.
@@ -85,6 +223,8 @@ goog.provide('AI.Blockly.ExportBlocksImage');
     group.setAttribute('class', 'blocklyBlockCanvas');
     var blocks = blockCanvas.cloneNode(true);
     blocks.removeAttribute('transform');
+    var colours = commentColours(workspace);
+    inlineCommentText(blocks, blockCanvas, colours);  // workspace comments
     group.appendChild(blocks);
 
     var box = blockCanvas.getBBox();
@@ -103,6 +243,7 @@ goog.provide('AI.Blockly.ExportBlocksImage');
       bounds.right = Math.max(bounds.right, xy.x + bubbleBox.x + bubbleBox.width);
       bounds.bottom = Math.max(bounds.bottom, xy.y + bubbleBox.y + bubbleBox.height);
       var bubbleClone = bubble.cloneNode(true);
+      inlineCommentText(bubbleClone, bubble, colours);
       group.appendChild(bubbleClone);
     }
     return {
@@ -117,13 +258,6 @@ goog.provide('AI.Blockly.ExportBlocksImage');
     options.scale = options.scale || 1;
     var xmlns = "http://www.w3.org/2000/xmlns/";
     var outer = document.createElement("div");
-
-    var textAreas = document.getElementsByTagName("textarea");
-
-    for (var i = 0; i < textAreas.length; i++)
-      {
-        textAreas[i].innerHTML = textAreas[i].value;
-      }
 
     var clone = el.cloneNode(true);
     var width, height;
@@ -202,6 +336,8 @@ goog.provide('AI.Blockly.ExportBlocksImage');
     for (var i = 0; i < toHide.length; i++) {
       toHide[i].parentElement.removeChild(toHide[i]);
     }
+
+    inlineCommentText(clone, el, commentColours(Blockly.common.getMainWorkspace()));
 
     // Bubbles reference an emboss filter defined in the workspace's <defs>,
     // which is not part of the export; a dangling filter reference makes
