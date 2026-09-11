@@ -142,6 +142,40 @@ suite('ExportBlocksImage', function() {
       });
     });
 
+    test('a single block export includes the comment bubbles of the block and its children', function() {
+      const outer = Blockly.serialization.blocks.append({
+        type: 'math_add', x: 200, y: 200,
+        inputs: { NUM0: { block: { type: 'math_number', fields: { NUM: 1 } } } }
+      }, workspace);
+      const inner = outer.getInputTargetBlock('NUM0');
+      inner.setCommentText('child comment');
+      return act(() => inner.getIcon('comment').setBubbleVisible(true)).then(() => {
+        const exported = blockExportGroup(outer);
+        const bubbles = exported.group.querySelectorAll('.blocklyTextInputBubble');
+        chai.assert.lengthOf(bubbles, 1, "only the exported block's own bubbles, not the other block's");
+        chai.assert.include(bubbles[0].textContent, 'child comment');
+        chai.assert.lengthOf(exported.group.querySelectorAll('foreignObject'), 0);
+        const root = inner.getIcon('comment').textInputBubble.getSvgRoot();
+        const xy = Blockly.utils.svgMath.getRelativeXY(root);
+        const box = root.getBBox();
+        chai.assert.isAtMost(exported.bbox.x, xy.x + box.x);
+        chai.assert.isAtLeast(exported.bbox.x + exported.bbox.width, xy.x + box.x + box.width);
+        chai.assert.isAtLeast(exported.bbox.y + exported.bbox.height, xy.y + box.y + box.height);
+      });
+    });
+
+    test('a single block export without comments keeps the block bounds', function() {
+      const lone = Blockly.serialization.blocks.append({ type: 'math_number', x: 300, y: 300 }, workspace);
+      const exported = blockExportGroup(lone);
+      chai.assert.isNull(exported.group.querySelector('.blocklyTextInputBubble'));
+      const box = lone.getSvgRoot().getBBox();
+      const xy = lone.getRelativeToSurfaceXY();
+      chai.assert.closeTo(exported.bbox.x, xy.x + box.x, 0.01);
+      chai.assert.closeTo(exported.bbox.y, xy.y + box.y, 0.01);
+      chai.assert.closeTo(exported.bbox.width, box.width, 0.01);
+      chai.assert.closeTo(exported.bbox.height, box.height, 0.01);
+    });
+
     test('the exported SVG rasterizes to an image', function(done) {
       // The reason foreignObject is replaced: an SVG containing one may not
       // draw into an <img>/<canvas>, which is how the PNG is produced.
