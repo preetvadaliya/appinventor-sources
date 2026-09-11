@@ -66,6 +66,52 @@ goog.provide('AI.Blockly.ExportBlocksImage');
     return css;
   }
 
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+
+  /**
+   * Assembles the part of a workspace that belongs in an exported image: the
+   * block canvas plus the comment bubbles from the bubble canvas. The two
+   * canvases share one transform, so with it removed their children line up.
+   * Mutator bubbles, warning bubbles and the backpack flyout also live on the
+   * bubble canvas and are deliberately left out.
+   * @param {!Blockly.WorkspaceSvg} workspace The workspace to export.
+   * @return {{group: !Element, bbox: {x: number, y: number, width: number,
+   *     height: number}}} A detached group and its bounds in workspace units.
+   */
+  out$.workspaceExportGroup = function(workspace) {
+    var blockCanvas = workspace.getCanvas();
+    var bubbleCanvas = workspace.getBubbleCanvas();
+    var group = document.createElementNS(SVG_NS, 'g');
+    group.setAttribute('class', 'blocklyBlockCanvas');
+    var blocks = blockCanvas.cloneNode(true);
+    blocks.removeAttribute('transform');
+    group.appendChild(blocks);
+
+    var box = blockCanvas.getBBox();
+    var bounds = {left: box.x, top: box.y, right: box.x + box.width,
+                  bottom: box.y + box.height};
+    var bubbles = bubbleCanvas ? bubbleCanvas.children : [];
+    for (var i = 0; i < bubbles.length; i++) {
+      var bubble = bubbles[i];
+      if (!bubble.classList || !bubble.classList.contains('blocklyTextInputBubble')) {
+        continue;
+      }
+      var bubbleBox = bubble.getBBox();
+      var xy = Blockly.utils.svgMath.getRelativeXY(bubble);
+      bounds.left = Math.min(bounds.left, xy.x + bubbleBox.x);
+      bounds.top = Math.min(bounds.top, xy.y + bubbleBox.y);
+      bounds.right = Math.max(bounds.right, xy.x + bubbleBox.x + bubbleBox.width);
+      bounds.bottom = Math.max(bounds.bottom, xy.y + bubbleBox.y + bubbleBox.height);
+      var bubbleClone = bubble.cloneNode(true);
+      group.appendChild(bubbleClone);
+    }
+    return {
+      group: group,
+      bbox: {x: bounds.left, y: bounds.top, width: bounds.right - bounds.left,
+             height: bounds.bottom - bounds.top}
+    };
+  };
+
   out$.svgAsDataUri = function(el, optmetrics, options, cb) {
     options = options || {};
     options.scale = options.scale || 1;
@@ -97,12 +143,16 @@ goog.provide('AI.Blockly.ExportBlocksImage');
       var bottom = (parseFloat(optmetrics.contentHeight)).toString();
       clone.setAttribute("viewBox", left + " " + top + " " + right + " " + bottom);
     } else {
-      var matrix = el.getScreenCTM();
-      clone.setAttribute('transform', clone.getAttribute('transform').replace(/translate\(.*?\)/, '')
-                         .replace(/scale\(.*?\)/, '').trim());
-      var box = el.getBBox();
-      //width = (box.x + box.width)/matrix.a;
-      //height = (box.y + box.height)/matrix.a;
+      var box;
+      if (options.bbox) {
+        // A group assembled for export (see workspaceExportGroup); it is not
+        // in the document, so its bounds are supplied by the caller.
+        box = options.bbox;
+      } else {
+        clone.setAttribute('transform', (clone.getAttribute('transform') || '')
+            .replace(/translate\(.*?\)/, '').replace(/scale\(.*?\)/, '').trim());
+        box = el.getBBox();
+      }
       width = box.width;
       height = box.height;
 
@@ -151,6 +201,14 @@ goog.provide('AI.Blockly.ExportBlocksImage');
 
     for (var i = 0; i < toHide.length; i++) {
       toHide[i].parentElement.removeChild(toHide[i]);
+    }
+
+    // Bubbles reference an emboss filter defined in the workspace's <defs>,
+    // which is not part of the export; a dangling filter reference makes
+    // browsers skip the element entirely.
+    var filtered = clone.querySelectorAll('[filter]');
+    for (var i = 0; i < filtered.length; i++) {
+      filtered[i].removeAttribute('filter');
     }
 
     var zelement = clone.getElementById("rectCorner");
@@ -218,7 +276,9 @@ goog.provide('AI.Blockly.ExportBlocksImage');
  *
  */
 AI.Blockly.ExportBlocksImage.onclickExportBlocks = function(metrics, opt_workspace) {
-  saveSvgAsPng((opt_workspace || Blockly.common.getMainWorkspace()).svgBlockCanvas_, "blocks.png", metrics);
+  var workspace = opt_workspace || Blockly.common.getMainWorkspace();
+  var exported = workspaceExportGroup(workspace);
+  saveSvgAsPng(exported.group, "blocks.png", metrics, {bbox: exported.bbox});
 }
 
 
@@ -233,7 +293,8 @@ AI.Blockly.ExportBlocksImage.getUri = function(callback, opt_workspace) {
   if (metrics == null || metrics.viewHeight == 0) {
     return null;
   }
-  svgAsDataUri(workspace.svgBlockCanvas_, metrics, {},
+  var exported = workspaceExportGroup(workspace);
+  svgAsDataUri(exported.group, metrics, {bbox: exported.bbox},
     function(uri) {
       var image = new Image();
       image.onload = function() {
