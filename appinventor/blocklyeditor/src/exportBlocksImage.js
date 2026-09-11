@@ -207,50 +207,108 @@ goog.provide('AI.Blockly.ExportBlocksImage');
   }
 
   /**
+   * Widens bounds to include an element, whose bbox is in its own coordinates
+   * and sits at offset within the export.
+   * @param {?{left: number, top: number, right: number, bottom: number}} bounds
+   *     The bounds so far, or null.
+   * @param {!Element} element A live SVG element.
+   * @param {{x: number, y: number}} offset Where the element sits.
+   * @return {{left: number, top: number, right: number, bottom: number}} The
+   *     widened bounds.
+   */
+  function includeBounds(bounds, element, offset) {
+    var box = element.getBBox();
+    var left = offset.x + box.x;
+    var top = offset.y + box.y;
+    if (!bounds) {
+      return {left: left, top: top, right: left + box.width, bottom: top + box.height};
+    }
+    bounds.left = Math.min(bounds.left, left);
+    bounds.top = Math.min(bounds.top, top);
+    bounds.right = Math.max(bounds.right, left + box.width);
+    bounds.bottom = Math.max(bounds.bottom, top + box.height);
+    return bounds;
+  }
+
+  /**
+   * Appends clones of the open comment bubbles of the given blocks to an
+   * export group. Bubbles live on the workspace's bubble canvas, positioned in
+   * the same coordinate space as the blocks.
+   * @param {!Element} group The export group.
+   * @param {!Array<!Blockly.BlockSvg>} blocks The blocks whose comments to add.
+   * @param {?Object} bounds The export bounds so far (see includeBounds).
+   * @param {{fill: string, border: string}} colours See commentColours.
+   * @return {?Object} The widened bounds.
+   */
+  function appendCommentBubbles(group, blocks, bounds, colours) {
+    for (var i = 0; i < blocks.length; i++) {
+      var icon = blocks[i].getIcon && blocks[i].getIcon('comment');
+      if (!icon || !icon.bubbleIsVisible()) {
+        continue;
+      }
+      // Blockly 11 has no public accessor for the icon's bubble.
+      var bubble = icon.textInputBubble;
+      if (!bubble || !bubble.getSvgRoot) {
+        continue;
+      }
+      var root = bubble.getSvgRoot();
+      var clone = root.cloneNode(true);
+      inlineCommentText(clone, root, colours);
+      group.appendChild(clone);
+      bounds = includeBounds(bounds, root, Blockly.utils.svgMath.getRelativeXY(root));
+    }
+    return bounds;
+  }
+
+  function toBBox(bounds) {
+    return {x: bounds.left, y: bounds.top, width: bounds.right - bounds.left,
+            height: bounds.bottom - bounds.top};
+  }
+
+  /**
    * Assembles the part of a workspace that belongs in an exported image: the
-   * block canvas plus the comment bubbles from the bubble canvas. The two
-   * canvases share one transform, so with it removed their children line up.
-   * Mutator bubbles, warning bubbles and the backpack flyout also live on the
-   * bubble canvas and are deliberately left out.
+   * block canvas plus the open comment bubbles of its blocks. The block and
+   * bubble canvases share one transform, so with it removed their children
+   * line up. Mutator bubbles, warning bubbles and the backpack flyout also
+   * live on the bubble canvas and are deliberately left out.
    * @param {!Blockly.WorkspaceSvg} workspace The workspace to export.
    * @return {{group: !Element, bbox: {x: number, y: number, width: number,
    *     height: number}}} A detached group and its bounds in workspace units.
    */
   out$.workspaceExportGroup = function(workspace) {
+    var colours = commentColours(workspace);
     var blockCanvas = workspace.getCanvas();
-    var bubbleCanvas = workspace.getBubbleCanvas();
     var group = document.createElementNS(SVG_NS, 'g');
     group.setAttribute('class', 'blocklyBlockCanvas');
     var blocks = blockCanvas.cloneNode(true);
     blocks.removeAttribute('transform');
-    var colours = commentColours(workspace);
     inlineCommentText(blocks, blockCanvas, colours);  // workspace comments
     group.appendChild(blocks);
+    var bounds = includeBounds(null, blockCanvas, {x: 0, y: 0});
+    bounds = appendCommentBubbles(group, workspace.getAllBlocks(false), bounds, colours);
+    return {group: group, bbox: toBBox(bounds)};
+  };
 
-    var box = blockCanvas.getBBox();
-    var bounds = {left: box.x, top: box.y, right: box.x + box.width,
-                  bottom: box.y + box.height};
-    var bubbles = bubbleCanvas ? bubbleCanvas.children : [];
-    for (var i = 0; i < bubbles.length; i++) {
-      var bubble = bubbles[i];
-      if (!bubble.classList || !bubble.classList.contains('blocklyTextInputBubble')) {
-        continue;
-      }
-      var bubbleBox = bubble.getBBox();
-      var xy = Blockly.utils.svgMath.getRelativeXY(bubble);
-      bounds.left = Math.min(bounds.left, xy.x + bubbleBox.x);
-      bounds.top = Math.min(bounds.top, xy.y + bubbleBox.y);
-      bounds.right = Math.max(bounds.right, xy.x + bubbleBox.x + bubbleBox.width);
-      bounds.bottom = Math.max(bounds.bottom, xy.y + bubbleBox.y + bubbleBox.height);
-      var bubbleClone = bubble.cloneNode(true);
-      inlineCommentText(bubbleClone, bubble, colours);
-      group.appendChild(bubbleClone);
-    }
-    return {
-      group: group,
-      bbox: {x: bounds.left, y: bounds.top, width: bounds.right - bounds.left,
-             height: bounds.bottom - bounds.top}
-    };
+  /**
+   * Assembles one block (with the blocks attached to it) and the open comment
+   * bubbles of those blocks, for the single-block PNG export.
+   * @param {!Blockly.BlockSvg} block The block to export.
+   * @return {{group: !Element, bbox: {x: number, y: number, width: number,
+   *     height: number}}} A detached group and its bounds in workspace units.
+   */
+  out$.blockExportGroup = function(block) {
+    var colours = commentColours(block.workspace);
+    var root = block.getSvgRoot();
+    var group = document.createElementNS(SVG_NS, 'g');
+    group.setAttribute('class', 'blocklyBlockCanvas');
+    // The clone keeps its translate(x, y): that is the block's position in
+    // workspace units, the same space the bubbles are positioned in.
+    var clone = root.cloneNode(true);
+    inlineCommentText(clone, root, colours);
+    group.appendChild(clone);
+    var bounds = includeBounds(null, root, block.getRelativeToSurfaceXY());
+    bounds = appendCommentBubbles(group, block.getDescendants(false), bounds, colours);
+    return {group: group, bbox: toBBox(bounds)};
   };
 
   out$.svgAsDataUri = function(el, optmetrics, options, cb) {
@@ -659,7 +717,8 @@ Blockly.exportBlockAsPng = function(block) {
   var xml = document.createElement('xml');
   xml.appendChild(Blockly.Xml.blockToDom(block, true));
   var code = Blockly.Xml.domToText(xml);
-  svgAsDataUri(block.getSvgRoot(), block.workspace.getMetrics(), null, function(uri) {
+  var exported = blockExportGroup(block);
+  svgAsDataUri(exported.group, block.workspace.getMetrics(), {bbox: exported.bbox}, function(uri) {
     var img = new Image();
     img.src = uri;
     img.onload = function() {
